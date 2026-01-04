@@ -126,13 +126,16 @@ if [[ \$IS_BITLOCKER =~ true ]]; then
     _EXITLOCK=1
     _RETCODE=0
     while [[ \$_EXITLOCK -ne 0 ]]; do
-        run0 --user=liveuser yad --timeout=0 --image=\$DOCS_QR \
+        run0 --user=liveuser yad \
+            --on-top \
+            --timeout=10 \
+            --image=\$DOCS_QR \
             --text="\$WARNING_MSG" \
             --button="Yes, I'm aware, continue":0 --button="Cancel installation":10
         _RETCODE=\$?
         case \$_RETCODE in
             0) _EXITLOCK=0; ;;
-            10) _EXITLOCK=0; exit 1 ;;
+            10) _EXITLOCK=0; pkill liveinst; pkill firefox; exit 0 ;;
         esac
     done
 fi
@@ -457,6 +460,22 @@ if [[ $imageref == *-nvidia* ]]; then
     mkdir -p /etc/environment.d /etc/skel/.config/environment.d
     echo "GSK_RENDERER=gl" >>/etc/environment.d/99-nvidia-fix.conf
     echo "GSK_RENDERER=gl" >>/etc/skel/.config/environment.d/99-nvidia-fix.conf
+fi
+
+# Reenable noveau.
+if [[ $imageref == *-nvidia* ]]; then
+    for pkg in nvidia-gpu-firmware mesa-vulkan-drivers; do
+        dnf -yq reinstall --allowerasing --repo=fedora,updates $pkg ||
+            dnf -yq install --allowerasing --repo=fedora,updates $pkg
+    done
+    # Ensure noveau vulkan icds exist
+    (
+        shopt -u nullglob
+        ls /usr/share/vulkan/icd.d/nouveau_icd.*.json >/dev/null
+    ) || {
+        echo >&2 "::error::No nouveau vulkan icds found at /usr/share/vulkan/icd.d/nouveau_icd.*.json"
+        exit 1
+    }
 fi
 
 # Determine desktop environment. Must match one of /usr/libexec/livesys/sessions.d/livesys-{desktop_env}
